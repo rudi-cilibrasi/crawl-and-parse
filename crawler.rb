@@ -9,7 +9,7 @@ require 'pdf-reader'
 # az is csv download
 
 # counties with death done: mi, wa, pa
-# counties done without death: ny, nj, ma
+# counties done without death: ny, nj, ma, ct(towns)
 
 # counties available: de, ia
 
@@ -309,6 +309,34 @@ class Crawler
         h[:tested] = string_to_i($1)
       else
         @errors << 'missing tested'
+      end
+      # towns, not counties
+      h[:towns] = []
+      rows = reader.page(5).text.gsub(',','').split("\n")
+      for r in rows
+        if r =~ /^([A-Z].*[a-z])\s+(\d+)\s+([A-Z].*[a-z])\s+(\d+)\s+([A-Z].*[a-z])\s+(\d+)$/
+          h_town = {}
+          h_town[:name] = $1
+          h_town[:positive] = $2.to_i
+          h[:towns] << h_town
+          h_town[:name] = $3
+          h_town[:positive] = $4.to_i
+          h[:towns] << h_town
+          h_town[:name] = $5
+          h_town[:positive] = $6.to_i
+          h[:towns] << h_town
+        elsif r =~ /^([A-Z].*[a-z])\s+(\d+)\s+([A-Z].*[a-z])\s+(\d+)$/
+          h_town = {}
+          h_town[:name] = $1
+          h_town[:positive] = $2.to_i
+          h[:towns] << h_town
+          h_town[:name] = $3
+          h_town[:positive] = $4.to_i
+          h[:towns] << h_town
+        end
+      end
+      if h[:towns].size < 169
+        @errors << 'missing towns'
       end
     else
       @errors << 'missing pdf'
