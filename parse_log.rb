@@ -37,11 +37,11 @@ for file in `ls data/*.log`.split("\n")
 
     if tested
       if h_latest[:tested] && h_latest[:tested].to_i > tested.to_i
-        puts line
-        puts h_latest
-        puts tested
+        #puts line
+        #puts h_latest
+        #puts tested
         #byebug
-        puts 
+        #puts "tested smaller! #{h[:st]} #{tested.to_i} #{h_latest[:tested]}"
       else
         h_latest[:tested] = tested
       end
@@ -60,14 +60,14 @@ for file in `ls data/*.log`.split("\n")
 
     _tested = h_latest[:positive].to_i + h_latest[:negative].to_i + h_latest[:pending].to_i
     if _tested > h_latest[:tested].to_i
-      puts "update tested #{h[:st]} #{_tested} #{h_latest[:tested]}"
+      #puts "update tested #{h[:st]} #{_tested} #{h_latest[:tested]}"
       h_latest[:tested] = _tested
     end
 
     if deaths 
       if h_latest[:deaths] && h_latest[:deaths].to_i > deaths.to_i
-        byebug
-        puts
+        #byebug
+        puts "death decreased: #{h[:st]} new: #{deaths.to_i} old: #{h_latest[:deaths]}"
       else
         h_latest[:deaths] = deaths
       end
@@ -84,11 +84,11 @@ for file in `ls data/*.log`.split("\n")
   # pending only uses last one
   new_tested = h_latest[:positive].to_i + h_latest[:negative].to_i + h[:pending].to_i
   if new_tested > h_latest[:tested].to_i
-    puts line
-    puts new_tested
-    puts h_latest
+    #puts line
+    #puts new_tested
+    #puts h_latest
     #byebug
-    h_latest[:tested] = new_tested
+    #h_latest[:tested] = new_tested
   end
 
   arr << [h[:st].upcase, h_latest[:tested], h_latest[:positive], h_latest[:deaths], h_latest[:tested_date].to_s[0..63], h_latest[:positive_date].to_s[0..63], h_latest[:deaths_date].to_s[0..63], h_latest[:tested_source], h_latest[:positive_source], h_latest[:deaths_source]].map{|i| i.to_s.gsub("\n",'|')}.join("\t")
@@ -102,7 +102,7 @@ lines.shift
 lines.map {|i| i.split("\t")}.each do |st, tested, positive, deaths, junk| 
   st2, tested2, positive2, deaths2, junk = arr[j].split("\t")
   byebug unless st2.downcase == st.downcase
-  byebug if tested.to_i > tested2.to_i
+  #byebug if tested.to_i > tested2.to_i
   byebug if positive.to_i > positive2.to_i
   byebug if deaths.to_i > deaths2.to_i
   if tested.to_i != tested2.to_i || positive.to_i != positive2.to_i || deaths.to_i != deaths2.to_i
