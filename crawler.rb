@@ -68,7 +68,7 @@ class Crawler
     @s += "\nBREAK\n" + s
     puts 'AK: tested data in image?'
     `curl http://dhss.alaska.gov/dph/Epi/id/PublishingImages/COVID-19/COVID-1_AKtesting_cumulative.png > #{@path}#{@st}/#{@filetime}_1.png`
-    h[:tested] = 1225+1163 # from image! save image?
+    h[:tested] = 1598+1323 # from image! save image?
     unless @auto_flag
       `open #{@path}#{@st}/#{@filetime}_1.png`
       byebug 
@@ -491,7 +491,7 @@ h[:pending]
 
     # county cases
     # hospitalized is in PR
-    h[:tested] = 3862+322+263  # from PR
+    h[:tested]=5800 # manual website
     # TODO tested 
     unless @auto_flag
       @driver.navigate.to 'https://health.hawaii.gov/news/covid-19-updates/'
@@ -1311,7 +1311,7 @@ h[:tested]=29371
   def parse_ny(h)
     crawl_page
     puts "death manual"
-    h[:deaths] = 366 # from nyc report TODO
+    h[:deaths] = 450 # from nyc report TODO
     rows = @doc.css('table')[0].text.gsub(',','').split("\n").map {|i| i.strip}.select {|i| i.size>0}
     county_pos = 0
     if rows[-2] == "Total Number of Positive Cases"
