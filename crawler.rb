@@ -8,7 +8,7 @@ require 'pdf-reader'
 # ak and nd have images
 # az is csv download
 
-# counties with death done: mi, wa
+# counties with death done: mi, wa, pa
 # counties done without death: ny, nj, ma
 
 # counties available: de, ia
@@ -1562,40 +1562,23 @@ class Crawler
     else
       @errors << 'missing pos neg deaths'
     end
-    h[:county_positive] = []
-    cols = @driver.find_elements(class: 'ms-rteTable-default').map {|i| i.text.gsub(',','').gsub(/\s+/,' ')}.select {|i| i=~/County/}[0].split
-    if cols[2] == 'Deaths'
-      cols = cols[3..-1]
-      i = 0
-      county = ''
-      while cols.size > 0
-        w = cols.shift
-        if w =~/^[0-9]+$/
-          if i == 0
-            @errors << 'county table parse error, expecting county, not number'
-            break
-          elsif i == 1
-            h[:county_positive] << [county, string_to_i(w)]
-            i = 2
-          else 
-            # county death
-            #h[:deaths] += string_to_i(w)
-            i = 0
-          end
-        else
-          if i == 0 || i == 2
-            county = w
-            i = 1
-          else
-            @errors << 'count table parse error2, expecting number, not county'
-            break
-          end
-        end
-      end
-    else
-      @errors << "missing county deaths"
+    rows = @driver.find_elements(class: 'ms-rteTable-default').map {|i| i.text.gsub(',','')}.select {|i| i=~/County\s+Number of Cases\sDeaths/}.first.split("\n")
+    rows.shift
+    h[:counties] = []
+    for r in rows
+      if (r =~ /(.*) (\d+) (\d+)/) || (r =~ /(.*) (\d+)/)
+        h_county = {}
+        h_county[:name] = $1
+        h_county[:positive] = $2.to_i
+        h_county[:deaths] = $3.to_i
+        h[:counties] << h_county
+      else
+        @errors << 'county table parse error'
+      end 
     end
-    # counties
+    if h[:counties].size < 56
+      @errors << 'missing counties'
+    end
     h
   end
 
