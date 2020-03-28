@@ -4,7 +4,7 @@ require 'selenium-webdriver'
 require 'pdf-reader'
 
 # not automatic:
-# ['ak', "az", "ct", 'hi', 'ma', "nd", 'ny', "va"] 
+# ['ak', "az", "nd"]
 # pdf for more data: ct, ma, ny
 # image: ak
 
@@ -280,19 +280,29 @@ class Crawler
   end
 
   def parse_ct(h)
-h[:tested]=8400
-h[:positive]=1291
-h[:deaths]=27
-h[:hospitalized] = 173
-h[:negative]
-h[:pending]
     crawl_page
     if @s =~ /([^'"]+CTDPHCOVID19summary[^'"]+)/
       url = 'https://portal.ct.gov' + $1
       `curl #{url} -o #{@path}#{@st}/#{@filetime}_1.pdf`
       `open #{@path}#{@st}/#{@filetime}_1.pdf`
-      puts 'manual entry from pdf' # TODO automate
-      byebug unless @auto_flag
+      reader = PDF::Reader.new("#{@path}#{@st}/#{@filetime}_1.pdf")
+      result = reader.page(1).text.gsub(/\s+/,' ').gsub(',','')
+      if result =~ /a total of ([\d]+) laboratory-confirmed cases of COVID-19 have been reported/
+        h[:positive] = string_to_i($1)
+      else
+        @errors << 'missing positive'
+      end
+      if result =~ / ([\d]+) residents have died /
+        h[:deaths] = string_to_i($1)
+      else
+        @errors << 'missing deaths'
+      end
+      result = reader.page(4).text.gsub(/\s+/,' ').gsub(',','') 
+      if result =~ / in total more than ([\d]+) tests have been reported/
+        h[:tested] = string_to_i($1)
+      else
+        @errors << 'missing tested'
+      end
     else
       @errors << 'missing pdf'
     end
@@ -491,11 +501,13 @@ h[:pending]
 
     # county cases
     # hospitalized is in PR
-    h[:tested]=5800 # manual website
-    # TODO tested 
-    unless @auto_flag
-      @driver.navigate.to 'https://health.hawaii.gov/news/covid-19-updates/'
-      byebug 
+    @driver.navigate.to 'https://health.hawaii.gov/news/covid-19-updates/'
+    url = @driver.page_source.scan(/https:\/\/[^'"]+daily-news-digest-[^'"]+/)[0]
+    @driver.navigate.to url
+    if @driver.page_source.gsub(',','') =~ /there have been more than ([\d]+) tests conducted/
+      h[:tested] = string_to_i($1)
+    else
+      @errors << 'missing tested'
     end
     h
   end
@@ -538,6 +550,7 @@ h[:pending]
     # TODO counties is available in x
     # age in root page
     # TODO deaths tested
+    h[:deaths] = 3 # chart
     h
   end
 
@@ -751,18 +764,26 @@ h[:pending]
       sleep 1
     end
     puts "pdf? manual entry of tested from pdf"
-h[:deaths]=35
-h[:tested]=29371
     if @driver.page_source =~ /([^'"]+covid-19-cases-in-massachusetts-as[^'"]+)/
       url = 'https://www.mass.gov' + $1
       `curl #{url} -o #{@path}#{@st}/#{@filetime}_1.pdf`
       `open #{@path}#{@st}/#{@filetime}_1.pdf`
-      puts 'manual entry from pdf' # TODO automate
-      byebug unless @auto_flag
+      reader = PDF::Reader.new("#{@path}#{@st}/#{@filetime}_1.pdf")
+      result = reader.page(1).text.gsub(/\s+/,' ').gsub(',','')
+      if result =~ /Deaths Attributed to COVID-19 ([\d]+)/
+        h[:deaths] = string_to_i($1)
+      else
+        @errors << 'missing deaths'
+      end
+      result = reader.page(2).text.gsub(/\s+/,' ').gsub(',','')
+      if result =~ /Total Patients Tested\*? [\d]+ ([\d]+)/
+        h[:tested] = string_to_i($1) 
+      else
+        @errors << 'missing tested'
+      end
     else
       @errors << 'missing pdf'
     end 
-    # TODO no death tested
     h
   end
 
@@ -832,6 +853,7 @@ h[:tested]=29371
     # counties
     # demographics
     # TODO no death data
+    h[:deaths] = 1 # NR
     h
   end
 
@@ -998,10 +1020,15 @@ h[:tested]=29371
       else
         flag = true
       end
-      if @s =~ /Total Number of Tests Completed [\/0-9]+:([^\n]+)/
+      if @s =~ /Total Number of Tests Completed [\/0-9]+[^\d]+([^\n]+)/
         h[:tested] = string_to_i($1)
       else
         #flag = true
+      end
+      if @s =~ /Total Deaths\n([^\n]+)\n/
+        h[:deaths] = string_to_i($1)
+      else
+        flag = true
       end
       if flag
         sec -= 1
@@ -1072,6 +1099,14 @@ h[:tested]=29371
     h[:hospitalized] = 16
     h[:pending] = 0
     h[:deaths] = 1 # TODO manual
+    pngs = @s.scan(/files\/documents\/Files\/MSS\/coronavirus[^'"]+/)
+    i = 0
+    for png in pngs
+      i += 1
+      url = 'https://www.health.nd.gov/sites/www/' + png
+      `curl #{url} -o #{@path}#{@st}/#{@filetime}_#{i}.png`
+    end
+    puts 'manual entry from image'
     byebug 
     h
   end  
@@ -1310,8 +1345,6 @@ h[:tested]=29371
 
   def parse_ny(h)
     crawl_page
-    puts "death manual"
-    h[:deaths] = 450 # from nyc report TODO
     rows = @doc.css('table')[0].text.gsub(',','').split("\n").map {|i| i.strip}.select {|i| i.size>0}
     county_pos = 0
     if rows[-2] == "Total Number of Positive Cases"
@@ -1337,8 +1370,13 @@ h[:tested]=29371
       url = 'https://www1.nyc.gov/assets/doh/downloads/pdf/imm/covid-19-daily-data-summary.pdf'
       `curl #{url} -o #{@path}#{@st}/#{@filetime}_1.pdf`
       `open #{@path}#{@st}/#{@filetime}_1.pdf`
-      puts "enter nyc deaths manually"
-      byebug
+      reader = PDF::Reader.new("#{@path}#{@st}/#{@filetime}_1.pdf")
+      result = reader.page(1).text.gsub(/\s+/,' ').gsub(',','')
+      if result =~ /Deaths ([\d]+)/
+        h[:deaths] = string_to_i($1) # from nyc report TODO
+      else
+        @errors << 'nyc missing deaths'
+      end
     end
     if h[:positive] != county_pos
       @errors << "county pos do not add up: #{h[:positive]} vs #{county_pos}"
@@ -1722,11 +1760,13 @@ crawl_page
 
   def parse_va(h)
     crawl_page
+=begin
     if @auto_flag
       puts "skipping VA"
       h[:skip] = true
       return h
     end
+=end
     if @driver.page_source =~ /<iframe src=\"https:\/\/public\.tableau\.com([^"]+)"/
       @url = 'https://public.tableau.com' + $1
     else
@@ -1734,23 +1774,40 @@ crawl_page
       return h
     end 
     crawl_page
-    @driver.find_element(:xpath, '//*[@id="download-ToolbarButton"]').click
+    sec = SEC/4
+    loop do
+      begin
+        sec -= 1
+        @driver.find_element(:xpath, '//*[@id="download-ToolbarButton"]').click
+        break
+      rescue => e
+        if sec == 0
+          @errors << 'click failed'
+          break
+        end
+        puts 'sleeping'
+        sleep(1)
+      end
+    end
     @driver.find_element(:xpath, '//*[@id="DownloadDialog-Dialog-Body-Id"]/div/button[4]').click
     sleep 3
     @driver.find_element(:xpath, '//*[@id="PdfDialog-Dialog-Body-Id"]/div/div[2]/div[4]/button').click
     sleep 5
-    reader = PDF::Reader.new(File.join(ENV['userprofile'], "Downloads", "Virginia COVID-19 Dashboard.pdf"))
+    `mv "../../Downloads/Virginia COVID-19 Dashboard.pdf" #{@path}#{@st}/#{@filetime}_1.pdf`
+    reader = PDF::Reader.new("#{@path}#{@st}/#{@filetime}_1.pdf")
+    #reader = PDF::Reader.new(File.join(ENV['userprofile'], "Downloads", "Virginia COVID-19 Dashboard.pdf"))
     result = reader.page(1).text
     # TODO save this pdf in /data/va dir
     # might want to reference other text to make sure it hasn't changed
-    # page.text.gsub(/\s+/, ' ').gsub(',','') =~ /Number of People Tested\^ Cases\*? Hospitalizations Deaths ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)/
-    resultArray = result.gsub(/\s+/, ' ').gsub(',','').scan(/\d+/).map(&:to_i)
-    h[:tested] = resultArray[1]
-    h[:positive] = resultArray[2]
-    h[:hospitalized] = resultArray[3]
-    h[:negative]
-    h[:pending]
-    h[:deaths] = resultArray[4]
+    # note that the ordering of numbers is different
+    if result.gsub(/\s+/, ' ').gsub(',','') =~ /\s([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)\sNumber of Cases/
+      h[:tested] = string_to_i($1)
+      h[:positive] = string_to_i($2)
+      h[:hospitalized] = string_to_i($3)
+      h[:deaths] = string_to_i($4)  
+    else
+      @errors << 'parse failed'
+    end
     h
   end
   
