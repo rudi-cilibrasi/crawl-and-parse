@@ -1533,7 +1533,7 @@ class Crawler
     cols = []
     loop do
       begin
-        cols = @driver.find_elements(class: 'card-body').map {|i| i.text.gsub(',','')}.select {|i| i=~/Total Completed Tests/}.first.split("\n")
+        cols = @driver.find_elements(class: 'card-body').map {|i| i.text.gsub(',','')}.select {|i| i=~/Total deaths/i}.first.split("\n")
 
         break
       rescue => e
@@ -1561,12 +1561,12 @@ class Crawler
     else
       @warnings << 'missing pending'
     end
-    if (x = cols.select {|v,i| v=~/^Total Com/}.first) 
+    if (x = cols.select {|v,i| v=~/^Total .* tested/}.first) 
       h[:tested] = string_to_i(x.split.last)
     else
       @errors << 'missing tested'
     end
-    if (x = cols.select {|v,i| v=~/^Total Deaths/}.first)
+    if (x = cols.select {|v,i| v=~/^Total Deaths/i}.first)
       h[:deaths] = string_to_i(x.split.last)
     else
       @errors << 'missing deaths'
