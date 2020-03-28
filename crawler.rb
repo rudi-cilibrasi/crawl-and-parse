@@ -5,12 +5,17 @@ require 'pdf-reader'
 
 # not automatic:
 # ['ak', "az", "nd"]
-# pdf for more data: ct, ma, ny
-# image: ak
+# ak and nd have images
+# az is csv download
 
-# counties done: ny
+# counties with death done: mi, wa, pa
+# counties done without death: ny, nj, ma
 
-# page missing data: de, ia, ky, md, me, mi, mo, mt, ne, oh, ri
+# counties available: de, ia
+
+# missing counties: ca
+# missing tested:   de, md, mo, oh
+# missing deaths:   de, ky, me, ri
 
 SEC = 60 # seconds to wait for page to load
 OFFSET = nil # if set, start running at that state
@@ -392,6 +397,11 @@ class Crawler
     else
       @errors << 'missing deaths'
     end
+    if pdf_url = @driver.page_source.scan(/https:\/\/[^'"]+covid-19-data---daily-report[^'"]+/).first
+      `curl #{pdf_url} -o #{@path}#{@st}/#{@filetime}_1.pdf`
+    else
+      @errors << 'missing pdf'
+    end
     if @driver.page_source =~ /"([^"]+)arcgis\.com([^"]+)"/
       url = $1 + 'arcgis.com' + $2
       crawl_page url
@@ -533,6 +543,7 @@ class Crawler
       byebug
       nil
     end
+    url_death = @driver.page_source.scan(/https:\/\/[^'"]+maps\.arcgis\.com\/apps\/opsdashboard[^'"]+/)[-1]
     crawl_page
     sec = SEC/2
     loop do
@@ -549,10 +560,15 @@ class Crawler
         break
       end
     end
+    crawl_page url_death
+    sleep 2
+    if @driver.page_source.gsub(',','').scan( /"\s*Deceased ([\d]+)\s*"/).first
+      h[:deaths] = string_to_i($1)
+    else
+      @errors << 'missing deaths'
+    end
     # TODO counties is available in x
     # age in root page
-    # TODO deaths tested
-    h[:deaths] = 3 # chart
     h
   end
 
@@ -743,7 +759,6 @@ class Crawler
     h
   end
 
-  # TODO download pdf
   def parse_ma(h)
     crawl_page
     sec = SEC/3
@@ -771,6 +786,24 @@ class Crawler
         h[:deaths] = string_to_i($1)
       else
         @errors << 'missing deaths'
+      end
+      rows = reader.page(1).text.split("\n").map {|i| i.gsub(/\s+/,' ').gsub(',','')}
+      j = rows.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/^County/}.first[1]
+      i = 0
+      h[:counties] = []
+      loop do
+        j += 1
+        break if i > 100 || rows[j] =~ /^Unknown/ || rows[j] =~ /^Sex/
+        if rows[j] =~ /^([A-Z][^\d]+)(\d+)/
+          h_county = {}
+          h_county[:name] = $1
+          h_county[:positive] = string_to_i($2)
+          h[:counties] << h_county
+        end
+        i += 1
+      end
+      if h[:counties].size < 13
+        @errors << 'missing counties'
       end
       result = reader.page(2).text.gsub(/\s+/,' ').gsub(',','')
       if result =~ /Total Patients Tested\*? [\d]+ ([\d]+)/
@@ -855,8 +888,7 @@ class Crawler
   end
 
   def parse_mi(h)
-# TODO tests back
-    # TODO county, sex, age, hospitalization
+    # TODO sex, age, hospitalization
     crawl_page
     x = @driver.find_elements(class: 'btn').select {|i| i.text =~ /Cumulative Data/i}.first
     unless x
@@ -899,6 +931,9 @@ class Crawler
       h_county[:deaths] = $3.to_i
       h[:counties] << h_county
       i += 1
+    end
+    if h[:counties].size < 58
+      @errors << 'missing counties'
     end
     h
   end
@@ -1039,7 +1074,6 @@ class Crawler
         break
       end
     end
-    # TODO deaths not available
     h
   end  
 
@@ -1090,9 +1124,9 @@ class Crawler
       return h
     end
     puts "image file for ND"
-    h[:tested] = 2708
-    h[:positive] = 68
-    h[:negative] = 2640
+    h[:tested] = 2892
+    h[:positive] = 83
+    h[:negative] = 2809
     h[:hospitalized] = 16
     h[:pending] = 0
     h[:deaths] = 1 # TODO manual
@@ -1255,6 +1289,9 @@ class Crawler
       puts 'sleeping'
       sleep 1
     end
+    if h[:counties].size < 21
+      @errors << 'missing counties'
+    end
     if h[:positive] != county_pos
       #@errors << 'county pos do not add up'
       # provisional pos are not counted
@@ -1362,6 +1399,9 @@ class Crawler
     else
       @errors << "missing positive"
     end
+    if h[:counties].size < 53
+      @errors << 'missing counties'
+    end
     # TOOD death data
     unless @auto_flag
       url = 'https://www1.nyc.gov/assets/doh/downloads/pdf/imm/covid-19-daily-data-summary.pdf'
@@ -1414,8 +1454,8 @@ class Crawler
     else
       @errors << 'missing hospitalized'
     end
-    # counties availble
-    # TODO tests no avaialbe
+    # counties available
+    # TODO tests not available
     h
   end
 
@@ -1522,40 +1562,23 @@ class Crawler
     else
       @errors << 'missing pos neg deaths'
     end
-    h[:county_positive] = []
-    cols = @driver.find_elements(class: 'ms-rteTable-default').map {|i| i.text.gsub(',','').gsub(/\s+/,' ')}.select {|i| i=~/County/}[0].split
-    if cols[2] == 'Deaths'
-      cols = cols[3..-1]
-      i = 0
-      county = ''
-      while cols.size > 0
-        w = cols.shift
-        if w =~/^[0-9]+$/
-          if i == 0
-            @errors << 'county table parse error, expecting county, not number'
-            break
-          elsif i == 1
-            h[:county_positive] << [county, string_to_i(w)]
-            i = 2
-          else 
-            # county death
-            #h[:deaths] += string_to_i(w)
-            i = 0
-          end
-        else
-          if i == 0 || i == 2
-            county = w
-            i = 1
-          else
-            @errors << 'count table parse error2, expecting number, not county'
-            break
-          end
-        end
-      end
-    else
-      @errors << "missing county deaths"
+    rows = @driver.find_elements(class: 'ms-rteTable-default').map {|i| i.text.gsub(',','')}.select {|i| i=~/County\s+Number of Cases\sDeaths/}.first.split("\n")
+    rows.shift
+    h[:counties] = []
+    for r in rows
+      if (r =~ /(.*) (\d+) (\d+)/) || (r =~ /(.*) (\d+)/)
+        h_county = {}
+        h_county[:name] = $1
+        h_county[:positive] = $2.to_i
+        h_county[:deaths] = $3.to_i
+        h[:counties] << h_county
+      else
+        @errors << 'county table parse error'
+      end 
     end
-    # counties
+    if h[:counties].size < 56
+      @errors << 'missing counties'
+    end
     h
   end
 
@@ -1889,6 +1912,9 @@ crawl_page
       end
     else
       @errors << 'counties failed'
+    end
+    if h[:counties].size < 34
+      @errors << 'missing counties'
     end 
     h
   end
