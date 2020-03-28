@@ -3,9 +3,9 @@
 require './crawler'
 
 crawler = Crawler.new
-crawler.run(['ak', "az", "ct", 'hi', 'ma', "nd", 'ny', "va"], false)
+crawler.run(['ak', "az", "nd"], false)
 
-errors = crawler.run([], false)
+errors = crawler.run
 
 puts
 puts 'done with full run'
@@ -14,5 +14,5 @@ puts
 while errors.size > 0
   puts "ready to run errors again:"
   byebug
-  errors = crawler.run(errors, false) 
+  errors = crawler.run(errors)
 end
