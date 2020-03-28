@@ -69,7 +69,9 @@ class Crawler
     puts 'AK: tested data in image?'
     `curl http://dhss.alaska.gov/dph/Epi/id/PublishingImages/COVID-19/COVID-1_AKtesting_cumulative.png > #{@path}#{@st}/#{@filetime}_1.png`
     h[:tested] = 1598+1323 # from image! save image?
-    unless @auto_flag
+    if @auto_flag
+      @warnings << 'tested was not manually entered'
+    else
       `open #{@path}#{@st}/#{@filetime}_1.png`
       byebug 
     end
@@ -596,11 +598,6 @@ class Crawler
       h[:tested] = string_to_i(cols[x[1]+1])
     else
       @errors << 'missing tested'
-    end
-    if @s =~ /Information regarding the number of persons under investigation updated on ([^\.]+)\./
-      h[:date] = $1.strip
-    else
-      @errors << "missing date"
     end
     h
   end
