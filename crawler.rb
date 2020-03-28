@@ -1212,11 +1212,14 @@ class Crawler
     else
       @errors << 'missing pending'
     end
+=begin
+# only for state lab tests, negatives have more labs
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/Persons with Specimens Submitted/i}.first
       h[:tested] = string_to_i(cols[x[1]+1])
     else
       @errors << 'missing tested'
     end
+=end
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/Persons Being Monitored/i}.first
       h[:monitored] = string_to_i(cols[x[1]+1])
     else
@@ -1227,7 +1230,6 @@ class Crawler
     else
       @errors << 'missing negative'
     end
-    # TODO no death data
     h
   end
 
