@@ -4,7 +4,8 @@ h_state = {}
 open('states.csv').readlines.map {|i| i.strip.split("\t")}.each {|st, url| h_state[st.upcase] = url}
 
 arr = []
-for file in `ls data/*.log`.split("\n")
+h_state.keys.sort.each do |_st|
+  file = "data/#{_st.downcase}.log"
 
   h_latest = {}
   # sorted by date

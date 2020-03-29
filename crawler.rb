@@ -73,7 +73,7 @@ class Crawler
     @s += "\nBREAK\n" + s
     puts 'AK: tested data in image?'
     `curl http://dhss.alaska.gov/dph/Epi/id/PublishingImages/COVID-19/COVID-1_AKtesting_cumulative.png > #{@path}#{@st}/#{@filetime}_1.png`
-    h[:tested] = 1598+1323 # from image! save image?
+    h[:tested] = 1806+1528 # from image! save image?
     if @auto_flag
       @warnings << 'tested was not manually entered'
     else
@@ -257,9 +257,15 @@ class Crawler
       puts 'sleeping'
       sleep 1
     end
+    url = 'https://www.cdph.ca.gov/Programs/OPA/Pages/New-Release-2020.aspx'
+    crawl_page url
+    urls = @driver.page_source.scan(/Programs\/OPA\/Pages\/NR[^"']+/).map {|i| 'https://www.cdph.ca.gov/' + i}.sort.reverse # NR20-32.aspx
+    url = urls.shift
+    while url =~ /NR20-32.aspx/
+      url = urls.shift
+    end
     # Negative from CDPH report of 778 tests on 3/7, and 88 pos => 690 neg
-    urls = @driver.page_source.scan(/Programs\/OPA\/Pages\/NR[^"']+/).map {|i| 'https://www.cdph.ca.gov/' + i} #.sort.reverse
-    crawl_page urls.shift
+    crawl_page url
     if (x=@driver.find_element(id: 'MainContent')) && x.text =~ /pproximately ([0-9,]+) tests had been conducted in California/
       h[:tested] = string_to_i($1)
     else
@@ -730,8 +736,6 @@ class Crawler
 
   def parse_ky(h)
     crawl_page
-    puts "death manual"
-    byebug unless @auto_flag
     cols = (s=@driver.find_elements(class: 'alert-success')[0].text).gsub(',','').split("\n").map {|i| i.strip}.select {|i| i.size >0}
     @s += "\nBREAK\n" + s
     if (x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/^Number Tested:/}.first) && x[0] =~ /^Number Tested: ([0-9]+)/
@@ -745,6 +749,10 @@ class Crawler
       @errors << 'missing positive'
     end
     # TODO no death data
+    url = 'https://governor.ky.gov/news'
+    crawl_page url
+    h[:deaths]=9
+    byebug unless @auto_flag
     h
   end
 
@@ -834,7 +842,7 @@ class Crawler
         @errors << 'missing counties'
       end
       result = reader.page(2).text.gsub(/\s+/,' ').gsub(',','')
-      if result =~ /Total Patients Tested\*? [\d]+ ([\d]+)/
+      if result =~ /Total ?Patients ?Tested\*? [\d]+ ([\d]+)/
         h[:tested] = string_to_i($1) 
       else
         @errors << 'missing tested'
@@ -1152,9 +1160,9 @@ class Crawler
       return h
     end
     puts "image file for ND"
-    h[:tested] = 2892
-    h[:positive] = 83
-    h[:negative] = 2809
+    h[:tested] = 3107
+    h[:positive] = 94
+    h[:negative] = 3013
     h[:hospitalized] = 16
     h[:pending] = 0
     h[:deaths] = 1 # TODO manual
@@ -1277,7 +1285,7 @@ class Crawler
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/^PUI pending/i}.first
       h[:pending] = string_to_i(cols[x[1]+1])
     else
-      @errors << 'missing pending'
+      (@errors << 'missing pending') if cols.size > 6
     end
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/Deaths/}.first
       h[:deaths] = string_to_i(cols[x[1]+1])
@@ -1414,7 +1422,7 @@ class Crawler
     if rows[-2] == "Total Number of Positive Cases"
       h[:positive] = rows[-1].to_i
       county_count = ((rows.size-4)/2)
-      if rows[1] == "Positive Cases" && county_count == 53
+      if rows[1] == "Positive Cases" && county_count > 54
         h[:counties] = []
         county_count.times do |i|
           h_county = {}
@@ -1517,7 +1525,7 @@ class Crawler
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/PUIs Pending Results/}.first
       h[:pending] = string_to_i(cols[x[1]+1])
     else
-      @errors << 'missing pending'
+      (@errors << 'missing pending') if cols.size > 11
     end
     if x = cols.map.with_index {|v,i| [v,i]}.select {|v,i| v=~/^Hospitalized/}.first
       h[:hospitalized] = string_to_i(cols[x[1]+1])
@@ -1642,7 +1650,7 @@ class Crawler
     if (x = cols.select {|v,i| v=~/^Number of people for whom tests are pending/}.first)
       h[:pending] = string_to_i(x.strip.split.last)
     else
-      @errors << 'missing pending'
+      @warnings << 'missing pending'
     end
     # TODO no death data
     h
@@ -2042,6 +2050,89 @@ crawl_page
     h
   end
 
+  ################
+  # counties
+
+  def parse_scc(h)
+    crawl_page
+    url = @s.scan(/https:\/\/[^'"]+powerbigov[^'"]+/).first
+    crawl_page url
+    sec = SEC/3
+    loop do
+      flag = true
+      @s = @driver.find_element(class: 'landingController').text.gsub(',','') rescue ''
+      if @s =~ /\n(\d+)\nTotal Cases/
+        h[:positive] = $1.to_i
+      else
+        flag = false
+      end
+      if @s =~ /\n(\d+)\nNew Cases by Day\nTotal Deaths/
+        h[:deaths] = $1.to_i
+      else
+        flag = false
+      end
+      break if flag
+      sec -= 1
+      if sec == 0
+        @errors << 'parse failed'
+        break
+      end
+      puts 'sleeping'
+      sleep 1
+    end
+    h
+  end
+
+  def parse_smc(h)
+    crawl_page
+    if @doc.css('table')[0].text.gsub(/\s+/,' ').gsub(',','') =~ /Positive (\d+) Deaths (\d+)/
+      h[:positive] = $1.to_i
+      h[:deaths] = $2.to_i
+    else
+      @errors << 'parse failed'
+    end
+    h
+  end
+
+  def parse_alameda(h)
+    crawl_page
+    sleep 2 
+    @s = @driver.find_elements(class: 'contacts_table')[0].text.gsub(',','') 
+    if @s =~ /Positive Cases: (\d+)\*?\nDeaths: (\d+)\*?/
+      h[:positive] = $1.to_i
+      h[:deaths] = $2.to_i
+    else
+      @errors << 'parse failed'
+    end
+    h
+  end
+
+  def parse_sf(h)
+    crawl_page
+    if @s =~ /Total Positive Cases: (\d+)/
+      h[:positive] = $1.to_i
+    else
+      @errors << 'missing positive'
+    end
+    if @s =~ /Deaths: (\d+)/
+      h[:deaths] = $1.to_i
+    else
+      @errors << 'missing deaths'
+    end
+    h
+  end
+
+  def parse_santacruz(h)
+    crawl_page
+    if @doc.css('table').map {|i| i.text}.select {|i| i =~ /Verified Cases/}[0].gsub(/\s+/,' ').gsub(',','') =~ /(\d+)[^\d]+\s*\/\s*(\d+)\s+COVID-19 Case In/
+      h[:positive] = $1.to_i
+      h[:deaths] = $2.to_i
+    else
+      @errors << 'parse failed'
+    end
+    h
+  end
+
   ######################################
 
   # look for a word on the webpage
@@ -2135,7 +2226,7 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
     # load previous numbers
     lines = open('all.csv').readlines.map {|i| i.split("\t")}
     # previous state stats
-    @h_prev = {}
+    @h_prev = Hash.new({})
     lines.each do |st, tested, positive, deaths, junk|
       st.downcase!
       @h_prev[st] = {}
@@ -2186,7 +2277,9 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
     skip_flag = OFFSET
     @filetime = Time.now.to_s[0..18].gsub(' ', '-').gsub(':', '.')
 
-    for @st, @url in (open('states.csv').readlines.map {|i| i.strip.split("\t")}.map {|st, url| [st.downcase, url]})
+    url_list = (open('states.csv').readlines.map {|i| i.strip.split("\t")}.map {|st, url| [st.downcase, url]})
+    url_list += (open('counties.csv').readlines.map {|i| i.strip.split("\t")}.map {|st, url| [st.downcase, url]})
+    for @st, @url in url_list
       @page_count = 0 # used for naming saved page
       next if crawl_list.size > 0 && !(crawl_list.include?(@st))
       puts "CRAWLING: #{@st}"
@@ -2264,7 +2357,7 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
             byebug
             puts
           end
-        elsif h[:positive] < @h_prev[@st][:positive]
+        elsif h[:positive] < @h_prev[@st][:positive].to_i
           puts "positive decreased for #{@st}"
           puts "old h: #{@h_prev[@st]}"
           puts "new h: #{h}"
