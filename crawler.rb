@@ -2430,10 +2430,10 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
     puts tested.inspect
     puts
     puts "#{errors_crawl.size} errors:"
-    puts errors_crawl.inspect
+    puts errors_crawl.map {|i| i.inspect}
     puts
     puts "#{warnings_crawl.size} warnings:"
-    puts warnings_crawl.inspect
+    puts warnings_crawl.map {|i| i.inspect}
     puts
     puts "#{skipped_crawl.size} skipped:"
     puts skipped_crawl.inspect
