@@ -410,6 +410,8 @@ class Crawler
       sleep 1
     end
     @errors << 'DE took deaths off'
+    # https://news.delaware.gov/2020/03/29/public-health-announces-1-additional-death-18-additional-positive-cases-in-delaware/
+    h[:deaths] = 6
     # TODO tested, not available
     # TODO counties
     h
@@ -1160,10 +1162,10 @@ class Crawler
       return h
     end
     puts "image file for ND"
-    h[:tested] = 3107
-    h[:positive] = 94
-    h[:negative] = 3013
-    h[:hospitalized] = 16
+    h[:tested] = 3724
+    h[:positive] = 98
+    h[:negative] = 3626
+    h[:hospitalized] = 18
     h[:pending] = 0
     h[:deaths] = 1 # TODO manual
     pngs = @s.scan(/files\/documents\/Files\/MSS\/coronavirus[^'"]+/)
@@ -1400,17 +1402,25 @@ class Crawler
       end
       x = @driver.find_elements(class: 'landingController')[0]
       @s = x.text.gsub(',','') if x
-      if (@s =~ /\n([0-9]+)Deaths Statewide\n/) && (@s =~ /\n([0-9]+)People Tested\n/) && (@s =~ /All\n([0-9]+)Negative\n([0-9]+)Positive\nResult/)
+      flag = true
+      if @s =~ /\n([0-9]+)Deaths Statewide\n/
+        h[:deaths] = string_to_i($1)
+      else
+        flag = false
+      end
+      if @s =~ /\n([0-9K]+)People Tested\n/
+        h[:tested] = string_to_i($1)
+      else 
+        flag = false
+      end
+
+      if (@s =~ /All\n([0-9]+)Negative\n([0-9]+)Positive\nResult/)
         h[:negative] = string_to_i($1)
         h[:positive] = string_to_i($2)
-        @s =~ /\n([0-9]+)People Tested\n/
-        h[:tested] = string_to_i($1)
-        @s =~ /\n([0-9]+)Deaths Statewide\n/
-        h[:deaths] = string_to_i($1)
-        return h
+      else
+        flag = false
       end
-      byebug if @s.size > 1000 && !@auto_flag
-      nil
+      return h if flag
     end    
     h
   end
@@ -1652,7 +1662,11 @@ class Crawler
     else
       @warnings << 'missing pending'
     end
-    # TODO no death data
+    if (x = cols.select {|v,i| v=~/^Number of Rhode Islanders to die from COVID/}.first)
+      h[:deaths] = string_to_i(x.strip.split.last)
+    else
+      @errors << 'missing neg'
+    end
     h
   end
 
@@ -1958,6 +1972,9 @@ crawl_page
   end
 
   def parse_wi(h)
+    # direct data available here:
+    # https://dhsgis.wi.gov/server/rest/services/DHS_COVID19/COVID19_WI/MapServer/3/query?where=1%3D1&outFields=*&outSR=4326&f=json
+    # counties also available 
     crawl_page
     if @s =~ /As of ([^<]+)</
       h[:date] = $1.strip
@@ -2160,7 +2177,11 @@ crawl_page
       nil
     end
     return s if s.class == Integer
+    s = s.strip.gsub(',','') if s.class == String
     return 0 if s == "--"
+    if s =~/^([0-9]+)\s?K/
+      return $1.to_i * 1000
+    end
     if s =~ /Appx\. (.*)/
       s = $1
     elsif s =~ /~(.*)/
@@ -2430,10 +2451,10 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
     puts tested.inspect
     puts
     puts "#{errors_crawl.size} errors:"
-    puts errors_crawl.inspect
+    puts errors_crawl.map {|i| i.inspect}
     puts
     puts "#{warnings_crawl.size} warnings:"
-    puts warnings_crawl.inspect
+    puts warnings_crawl.map {|i| i.inspect}
     puts
     puts "#{skipped_crawl.size} skipped:"
     puts skipped_crawl.inspect
