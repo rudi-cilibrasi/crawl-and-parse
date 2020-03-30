@@ -2350,7 +2350,6 @@ options = Selenium::WebDriver::Firefox::Options.new(profile: profile)
     url_list += (open('counties.csv').readlines.map {|i| i.strip.split("\t")}.map {|st, url| [st.downcase, url]})
     for @st, @url in url_list
       @page_count = 0 # used for naming saved page
-      puts "url: #{@url}"
       next if crawl_list.size > 0 && !(crawl_list.include?(@st))
       puts "CRAWLING: #{@st}"
       skip_flag = false if @st == OFFSET
